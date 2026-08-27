@@ -128,6 +128,15 @@ export const examApiService = {
     if (!response.ok) throw new Error('Không thể lấy danh sách câu hỏi của bài thi');
     return response.json();
   },
+
+  async getExamResults(examId: number): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/v1/teacher/exams/${examId}/results`, {
+      method: 'GET',
+      headers: createAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Không thể lấy danh sách sinh viên đã làm bài');
+    return response.json();
+  },
 };
 
 export const umlApiService = {
@@ -182,7 +191,8 @@ export const umlApiService = {
   async submitAssignment(payload: { assignmentId: number; fileUrl?: string; fileType?: string; file?: File; plantumlSource?: string }): Promise<any> {
     const token = getAuthToken();
     if (!token) throw new Error('Chưa đăng nhập. Vui lòng đăng nhập trước khi thực hiện thao tác.');
-    // Nếu có File thật, gửi trực tiếp bằng multipart (tránh vòng chuyển base64 gây lỗi/nặng)
+
+    // 1. Trường hợp nộp tệp (ảnh/PDF)
     if (payload.file) {
       const form = new FormData();
       form.append('assignmentId', String(payload.assignmentId));
@@ -202,11 +212,16 @@ export const umlApiService = {
       return response.json();
     }
 
+    // 2. Trường hợp nộp mã PlantUML (Text)
     const form = new URLSearchParams();
     form.set('assignmentId', String(payload.assignmentId));
-    form.set('fileUrl', payload.fileUrl || '');
-    form.set('fileType', payload.fileType || '');
-    if (payload.plantumlSource) form.set('plantumlSource', payload.plantumlSource);
+    if (payload.plantumlSource) {
+      form.set('plantumlSource', payload.plantumlSource);
+      form.set('fileType', 'PLANTUML');
+    } else {
+      form.set('fileUrl', payload.fileUrl || '');
+      form.set('fileType', payload.fileType || 'IMAGE');
+    }
 
     const response = await fetch(`${API_BASE_URL}/v1/student/uml-submissions`, {
       method: 'POST',
@@ -278,6 +293,16 @@ export const questionsApiService = {
     return response.json();
   },
 
+  async updateQuestion(id: number, questionData: any): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/v1/teacher/questions/${id}`, {
+      method: 'PUT',
+      headers: createAuthHeaders(),
+      body: JSON.stringify(questionData),
+    });
+    if (!response.ok) throw new Error('Lỗi cập nhật câu hỏi');
+    return response.json();
+  },
+
   async deleteQuestion(id: number): Promise<void> {
     await fetch(`${API_BASE_URL}/v1/teacher/questions/${id}`, {
       method: 'DELETE',
@@ -313,6 +338,35 @@ export const coursesApiService = {
     });
     return response.json();
   },
+
+  async createCourse(courseData: any): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/v1/teacher/courses`, {
+      method: 'POST',
+      headers: createAuthHeaders(),
+      body: JSON.stringify(courseData),
+    });
+    if (!response.ok) throw new Error('Lỗi tạo khóa học');
+    return response.json();
+  },
+
+  async updateCourse(id: number, courseData: any): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/v1/teacher/courses/${id}`, {
+      method: 'PUT',
+      headers: createAuthHeaders(),
+      body: JSON.stringify(courseData),
+    });
+    if (!response.ok) throw new Error('Lỗi cập nhật khóa học');
+    return response.json();
+  },
+
+  async deleteCourse(id: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/v1/teacher/courses/${id}`, {
+      method: 'DELETE',
+      headers: createAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Lỗi xóa khóa học');
+  },
+
   async getSubjectsByCourseId(courseId: number): Promise<any[]> {
     const response = await fetch(`${API_BASE_URL}/v1/courses/${courseId}/subjects`, {
       method: 'GET',
@@ -338,6 +392,14 @@ export const materialsApiService = {
     });
     return response.json();
   },
+  async getMaterialsBySubject(subjectId: number): Promise<CourseMaterial[]> {
+    const response = await fetch(`${API_BASE_URL}/v1/subjects/${subjectId}/materials`, {
+      method: 'GET',
+      headers: createAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Không thể lấy tài liệu của môn học');
+    return response.json();
+  },
   async getMyMaterials(): Promise<CourseMaterial[]> {
     const response = await fetch(`${API_BASE_URL}/v1/teacher/materials`, {
       method: 'GET',
@@ -346,7 +408,20 @@ export const materialsApiService = {
     return response.json();
   },
   async getAllActiveMaterials(): Promise<CourseMaterial[]> {
-    return this.getMyMaterials();
+    const response = await fetch(`${API_BASE_URL}/v1/materials`, {
+      method: 'GET',
+      headers: createAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Không thể lấy tài liệu học tập');
+    return response.json();
+  },
+  async getMaterialsByCourse(courseId: number): Promise<CourseMaterial[]> {
+    const response = await fetch(`${API_BASE_URL}/v1/courses/${courseId}/materials`, {
+      method: 'GET',
+      headers: createAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Không thể lấy tài liệu của khóa học');
+    return response.json();
   }
 };
 

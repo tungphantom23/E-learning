@@ -17,6 +17,9 @@ public interface CourseMaterialRepository extends JpaRepository<CourseMaterial, 
     @Query("SELECT cm FROM CourseMaterial cm WHERE cm.course.id = :courseId AND cm.isActive = true ORDER BY cm.createdAt DESC")
     List<CourseMaterial> findByCourseIdAndActive(@Param("courseId") Long courseId);
 
+    @Query("SELECT cm FROM CourseMaterial cm WHERE cm.subject.id = :subjectId AND cm.isActive = true ORDER BY cm.createdAt DESC")
+    List<CourseMaterial> findBySubjectIdAndActive(@Param("subjectId") Long subjectId);
+
     /**
      * Lấy tất cả tài liệu được tải lên bởi một giảng viên
      */

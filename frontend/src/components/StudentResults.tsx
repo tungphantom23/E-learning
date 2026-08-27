@@ -8,6 +8,9 @@ const StudentResults: React.FC = () => {
   const [sortBy, setSortBy] = useState<'date' | 'score'>('date');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [answerDetails, setAnswerDetails] = useState<any>(null);
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -16,23 +19,29 @@ const StudentResults: React.FC = () => {
         setError(null);
 
         const resultsData = await studentDashboardApiService.getExamResults();
-        const examResults: ExamResult[] = resultsData.map((result: any) => ({
-          id: result.resultId,
-          examTitle: result.examTitle,
-          courseCode: 'N/A',
-          courseName: result.subjectTitle,
-          score: result.score,
-          maxScore: 10,
-          percentage: (result.score / 10) * 100,
-          submittedAt: new Date(result.submitTime || result.startTime).toLocaleString('vi-VN'),
-          status: result.status === 'SUBMITTED' ? 'Đã chấm' : 'Chờ chấm',
-          teacherComment: ''
-        }));
+        const examResults: ExamResult[] = resultsData.map((result: any) => {
+          const submitTimeRaw = result.submitTime || result.startTime;
+          return {
+            id: result.resultId,
+            examTitle: result.examTitle,
+            courseCode: 'N/A',
+            courseName: result.subjectTitle,
+            score: result.score,
+            maxScore: 10,
+            percentage: (result.score / 10) * 100,
+            submittedAt: submitTimeRaw ? new Date(submitTimeRaw).toLocaleString('vi-VN') : 'N/A',
+            submitTime: submitTimeRaw,
+            status: result.status === 'SUBMITTED' ? 'Đã chấm' : 'Chờ chấm',
+            teacherComment: ''
+          };
+        });
 
         // Sort results
         const sorted = [...examResults].sort((a, b) => {
           if (sortBy === 'date') {
-            return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
+            const timeA = a.submitTime ? new Date(a.submitTime).getTime() : 0;
+            const timeB = b.submitTime ? new Date(b.submitTime).getTime() : 0;
+            return timeB - timeA;
           } else {
             return b.percentage - a.percentage;
           }
@@ -61,6 +70,30 @@ const StudentResults: React.FC = () => {
     if (gradedResults.length === 0) return 0;
     const passed = gradedResults.filter(r => r.percentage >= 50).length;
     return ((passed / gradedResults.length) * 100).toFixed(0);
+  };
+
+  const handleViewDetails = async (examId: number) => {
+    setDetailLoading(true);
+    try {
+      const response = await fetch(`/api/v1/student/exams/${examId}/answer-details`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAnswerDetails(data);
+        setSelectedExamId(examId);
+      } else {
+        alert('Không thể tải chi tiết đáp án');
+      }
+    } catch (err) {
+      console.error('Error loading details:', err);
+      alert('Lỗi khi tải chi tiết đáp án');
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   const getResultColor = (percentage: number) => {
@@ -168,8 +201,9 @@ const StudentResults: React.FC = () => {
                   <div className="detail-item">
                     <span className="detail-label">Thời gian nộp</span>
                     <span className="detail-value">
-                      {new Date(result.submittedAt).toLocaleDateString('vi-VN')} lúc{' '}
-                      {new Date(result.submittedAt).toLocaleTimeString('vi-VN')}
+                      {result.submitTime 
+                        ? new Date(result.submitTime).toLocaleString('vi-VN') 
+                        : result.submittedAt}
                     </span>
                   </div>
                 </div>
@@ -217,7 +251,9 @@ const StudentResults: React.FC = () => {
 
               <div className="result-actions">
                 {result.status === 'Đã chấm' && (
-                  <button className="btn-secondary">Xem chi tiết đáp án →</button>
+                  <button className="btn-secondary" onClick={() => handleViewDetails(result.id)}>
+                    Xem chi tiết đáp án →
+                  </button>
                 )}
               </div>
             </div>

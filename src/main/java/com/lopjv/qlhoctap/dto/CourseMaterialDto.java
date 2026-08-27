@@ -17,8 +17,11 @@ public class CourseMaterialDto {
 
     private Long id;
     private Long courseId;
+    private Long subjectId;
     private String courseCode;
     private String courseName;
+    private String subjectCode;
+    private String subjectTitle;
     private String fileName;
     private String fileType;
     private Long fileSize;

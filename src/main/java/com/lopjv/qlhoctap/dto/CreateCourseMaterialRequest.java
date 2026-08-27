@@ -18,6 +18,9 @@ public class CreateCourseMaterialRequest {
     @NotNull(message = "Mã khóa học không được để trống")
     private Long courseId;
 
+    @NotNull(message = "Mã môn học không được để trống")
+    private Long subjectId;
+
     @NotBlank(message = "Tên tệp không được để trống")
     private String fileName;
 

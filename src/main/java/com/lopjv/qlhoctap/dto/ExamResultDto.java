@@ -1,12 +1,12 @@
 package com.lopjv.qlhoctap.dto;
 
+import java.time.OffsetDateTime;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.OffsetDateTime;
 
 @Getter
 @Setter
@@ -16,6 +16,7 @@ import java.time.OffsetDateTime;
 public class ExamResultDto {
 
     private Long resultId;
+    private Long examId;
     private String examTitle;
     private String subjectTitle;
     private Double score;

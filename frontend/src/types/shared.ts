@@ -3,8 +3,11 @@
 export interface CourseMaterial {
   id: number;
   courseId: number;
+  subjectId?: number;
   courseCode: string;
   courseName: string;
+  subjectCode?: string;
+  subjectTitle?: string;
   fileName: string;
   fileType: string;
   fileSize: number;

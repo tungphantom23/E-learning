@@ -16,7 +16,6 @@ import com.lopjv.qlhoctap.dto.ExamForStudentDto;
 import com.lopjv.qlhoctap.dto.ExamResultDto;
 import com.lopjv.qlhoctap.dto.StudentInfoDto;
 import com.lopjv.qlhoctap.entity.User;
-import com.lopjv.qlhoctap.repository.CourseRepository;
 import com.lopjv.qlhoctap.repository.EnrollmentRepository;
 import com.lopjv.qlhoctap.repository.ExamQuestionRepository;
 import com.lopjv.qlhoctap.repository.ExamRepository;
@@ -29,7 +28,6 @@ import com.lopjv.qlhoctap.security.SecurityUtils;
 public class StudentDashboardController {
 
     private final UserRepository userRepository;
-    private final CourseRepository courseRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final ExamRepository examRepository;
     private final ExamQuestionRepository examQuestionRepository;
@@ -37,13 +35,11 @@ public class StudentDashboardController {
 
     public StudentDashboardController(
             UserRepository userRepository,
-            CourseRepository courseRepository,
             EnrollmentRepository enrollmentRepository,
             ExamRepository examRepository,
             ExamQuestionRepository examQuestionRepository,
             StudentExamRepository studentExamRepository) {
         this.userRepository = userRepository;
-        this.courseRepository = courseRepository;
         this.enrollmentRepository = enrollmentRepository;
         this.examRepository = examRepository;
         this.examQuestionRepository = examQuestionRepository;
@@ -132,43 +128,43 @@ public class StudentDashboardController {
      */
     @GetMapping("/exam-results")
     public ResponseEntity<List<ExamResultDto>> getExamResults() {
+        User currentUser = SecurityUtils.getCurrentUser(userRepository);
+        List<com.lopjv.qlhoctap.entity.StudentExam> studentExams = studentExamRepository.findByStudentId(currentUser.getId());
+
         List<ExamResultDto> results = new ArrayList<>();
-        OffsetDateTime now = OffsetDateTime.now();
+        for (com.lopjv.qlhoctap.entity.StudentExam studentExam : studentExams) {
+            com.lopjv.qlhoctap.entity.Exam exam = studentExam.getExam();
+            if (exam == null) {
+                continue;
+            }
 
-        // TODO: Query từ StudentExam table khi có liên kết đúng
-        // Hiện tại trả về mock data
-        results.add(ExamResultDto.builder()
-                .resultId(1L)
-                .examTitle("Kiểm tra giữa kỳ")
-                .subjectTitle("Lập trình Java cơ bản")
-                .score(8.5)
-                .durationMinutes(90)
-                .status("IN_PROGRESS")
-                .startTime(now.minusDays(20))
-                .submitTime(now.minusDays(20).plusMinutes(85))
-                .build());
+            results.add(ExamResultDto.builder()
+                    .resultId(studentExam.getId())
+                    .examId(exam.getId())
+                    .examTitle(exam.getTitle())
+                    .subjectTitle(exam.getSubject() != null ? exam.getSubject().getTitle() : "")
+                    .score(studentExam.getScore() != null ? studentExam.getScore().doubleValue() : 0.0)
+                    .durationMinutes(exam.getDurationMinutes())
+                    .status(studentExam.getStatus())
+                    .startTime(studentExam.getStartTime())
+                    .submitTime(studentExam.getSubmitTime())
+                    .build());
+        }
 
-        results.add(ExamResultDto.builder()
-                .resultId(2L)
-                .examTitle("Kiểm tra cuối kỳ")
-                .subjectTitle("Lập trình Java cơ bản")
-                .score(9.0)
-                .durationMinutes(120)
-                .status("SUBMITTED")
-                .startTime(now.minusDays(15))
-                .submitTime(now.minusDays(15).plusMinutes(110))
-                .build());
-
-        results.add(ExamResultDto.builder()
-                .resultId(3L)
-                .examTitle("Kiểm tra giữa kỳ")
-                .subjectTitle("Thiết kế giao diện Web")
-                .score(7.5)
-                .durationMinutes(90)
-                .status("SUBMITTED")
-                .startTime(now.minusDays(12))
-                .submitTime(now.minusDays(12).plusMinutes(80))
-                .build());
+        results.sort((a, b) -> {
+            OffsetDateTime right = b.getSubmitTime() != null ? b.getSubmitTime() : b.getStartTime();
+            OffsetDateTime left = a.getSubmitTime() != null ? a.getSubmitTime() : a.getStartTime();
+            if (left == null && right == null) {
+                return 0;
+            }
+            if (left == null) {
+                return 1;
+            }
+            if (right == null) {
+                return -1;
+            }
+            return right.compareTo(left);
+        });
 
         return ResponseEntity.ok(results);
     }

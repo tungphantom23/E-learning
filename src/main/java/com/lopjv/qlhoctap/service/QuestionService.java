@@ -1,5 +1,12 @@
 package com.lopjv.qlhoctap.service;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.lopjv.qlhoctap.dto.CreateQuestionRequest;
 import com.lopjv.qlhoctap.dto.ExamQuestionForStudentDto;
 import com.lopjv.qlhoctap.dto.QuestionDto;
@@ -15,12 +22,6 @@ import com.lopjv.qlhoctap.repository.ExamQuestionRepository;
 import com.lopjv.qlhoctap.repository.QuestionOptionRepository;
 import com.lopjv.qlhoctap.repository.QuestionRepository;
 import com.lopjv.qlhoctap.repository.SubjectRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class QuestionService {
@@ -31,9 +32,9 @@ public class QuestionService {
     private final ExamQuestionRepository examQuestionRepository;
 
     public QuestionService(QuestionRepository questionRepository,
-                           QuestionOptionRepository questionOptionRepository,
-                           SubjectRepository subjectRepository,
-                           ExamQuestionRepository examQuestionRepository) {
+            QuestionOptionRepository questionOptionRepository,
+            SubjectRepository subjectRepository,
+            ExamQuestionRepository examQuestionRepository) {
         this.questionRepository = questionRepository;
         this.questionOptionRepository = questionOptionRepository;
         this.subjectRepository = subjectRepository;
@@ -94,12 +95,15 @@ public class QuestionService {
     }
 
     /**
-     * Cập nhật nội dung câu hỏi (content, chapterTopic, difficulty) và xóa/tạo lại options.
+     * Cập nhật nội dung câu hỏi (content, chapterTopic, difficulty) và xóa/tạo
+     * lại options.
      */
     @Transactional
     public QuestionDto updateQuestion(Long id, CreateQuestionRequest request) {
         Question question = questionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy câu hỏi với ID: " + id));
+        Subject subject = subjectRepository.findById(request.getSubjectId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy môn học với ID: " + request.getSubjectId()));
 
         if (request.getOptions() == null || request.getOptions().size() < 2) {
             throw new IllegalArgumentException("Câu hỏi phải có ít nhất 2 phương án trả lời.");
@@ -112,6 +116,7 @@ public class QuestionService {
         }
 
         question.setContent(request.getContent().trim());
+        question.setSubject(subject);
         question.setChapterTopic(request.getChapterTopic());
         question.setDifficulty(request.getDifficulty().toUpperCase());
         question.setQuestionType(questionType);
@@ -149,9 +154,9 @@ public class QuestionService {
 
             List<QuestionOptionForStudentDto> optionDtos = options.stream()
                     .map(o -> QuestionOptionForStudentDto.builder()
-                            .id(o.getId())
-                            .content(o.getContent())
-                            .build())
+                    .id(o.getId())
+                    .content(o.getContent())
+                    .build())
                     .collect(Collectors.toList());
 
             result.add(ExamQuestionForStudentDto.builder()
@@ -177,10 +182,10 @@ public class QuestionService {
                 .questionType(question.getQuestionType())
                 .difficulty(question.getDifficulty())
                 .options(options.stream().map(opt -> QuestionOptionDto.builder()
-                        .id(opt.getId())
-                        .content(opt.getContent())
-                        .isCorrect(opt.getIsCorrect())
-                        .build()).collect(Collectors.toList()))
+                .id(opt.getId())
+                .content(opt.getContent())
+                .isCorrect(opt.getIsCorrect())
+                .build()).collect(Collectors.toList()))
                 .build();
     }
 }

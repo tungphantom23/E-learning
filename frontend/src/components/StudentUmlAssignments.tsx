@@ -34,6 +34,7 @@ const StudentUmlAssignments: React.FC = () => {
   const [plantumlText, setPlantumlText] = useState<Record<number, string>>({});
   const [usePlantuml, setUsePlantuml] = useState<Record<number, boolean>>({});
   const [plantumlPreviewUrl, setPlantumlPreviewUrl] = useState<Record<number, string>>({});
+  const [expandedAssignments, setExpandedAssignments] = useState<Record<number, boolean>>({});
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (message: string) => {
@@ -46,11 +47,12 @@ const StudentUmlAssignments: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const courses = await coursesApiService.getSubjectsByCourseId ? await studentDashboardApiService.getEnrolledCourses() : [];
+      const enrolledCourses = await studentDashboardApiService.getEnrolledCourses().catch(() => []);
       const allAssignments: UmlAssignmentItem[] = [];
 
-      for (const course of courses) {
-        const subjects = await coursesApiService.getSubjectsByCourseId(course.courseId).catch(() => []);
+      for (const course of enrolledCourses) {
+        const courseId = course.courseId || course.id;
+        const subjects = await coursesApiService.getSubjectsByCourseId(courseId).catch(() => []);
         for (const subject of subjects) {
           const items = await umlApiService.getAssignmentsBySubject(subject.id).catch(() => []);
           allAssignments.push(...items.map((item: any) => ({
@@ -91,17 +93,51 @@ const StudentUmlAssignments: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const getSubmissionKindLabel = (submission: UmlSubmissionItem) => {
+    const fileType = (submission.fileType || '').toUpperCase();
+    if (fileType === 'PLANTUML') return 'mã PlantUML';
+    if (fileType === 'PDF') return 'file PDF';
+    if (fileType === 'IMAGE' || fileType === 'PNG' || fileType === 'JPG' || fileType === 'JPEG') return 'hình ảnh';
+    if (submission.fileUrl) return 'tệp đính kèm';
+    return 'bài nộp';
+  };
+
+  const handlePreview = (assignmentId: number) => {
+    const src = plantumlText[assignmentId] || '';
+    if (!src.trim()) return showToast('Vui lòng nhập mã PlantUML.');
+
+    try {
+      // Sử dụng TextEncoder thay vì Buffer để an toàn trên trình duyệt
+      const hex = Array.from(new TextEncoder().encode(src))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      const url = `https://www.plantuml.com/plantuml/png/~h${hex}`;
+      setPlantumlPreviewUrl(prev => ({ ...prev, [assignmentId]: url }));
+    } catch (err) {
+      showToast('Lỗi xử lý mã PlantUML.');
+    }
+  };
+
   const handleSubmit = async (assignmentId: number) => {
+    const isUmlMode = !!usePlantuml[assignmentId];
     const fileObj = fileObject[assignmentId] || null;
-    const plantuml = plantumlText[assignmentId] || null;
-    if (!fileObj && !plantuml) return showToast('Vui lòng chọn tệp hoặc dán mã PlantUML.');
+    const plantuml = plantumlText[assignmentId] || '';
+
+    if (!isUmlMode && !fileObj) return showToast('Vui lòng chọn tệp để nộp.');
+    if (isUmlMode && !plantuml.trim()) return showToast('Vui lòng dán mã PlantUML.');
 
     setSubmittingId(assignmentId);
     try {
-      const created = await umlApiService.submitAssignment({ assignmentId, file: fileObj, plantumlSource: plantuml });
+      await umlApiService.submitAssignment({
+        assignmentId,
+        file: isUmlMode ? undefined : fileObj,
+        plantumlSource: isUmlMode ? plantuml : undefined
+      });
       showToast('Đã nộp bài tập UML thành công!');
       setFileObject(prev => ({ ...prev, [assignmentId]: null }));
       setPlantumlText(prev => ({ ...prev, [assignmentId]: '' }));
+      setPlantumlPreviewUrl(prev => ({ ...prev, [assignmentId]: '' }));
       await loadData();
     } catch (err: any) {
       showToast(err.message || 'Lỗi khi nộp bài tập.');
@@ -110,13 +146,8 @@ const StudentUmlAssignments: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return <div style={{ padding: '60px', textAlign: 'center' }}><h3>Đang tải bài tập UML...</h3></div>;
-  }
-
-  if (error) {
-    return <div style={{ padding: '40px', color: 'red' }}>{error}</div>;
-  }
+  if (loading) return <div style={{ padding: '60px', textAlign: 'center' }}><h3>Đang tải bài tập UML...</h3></div>;
+  if (error) return <div style={{ padding: '40px', color: 'red' }}>{error}</div>;
 
   return (
     <div style={{ padding: '20px', maxWidth: '900px', margin: '0 auto' }}>
@@ -131,117 +162,107 @@ const StudentUmlAssignments: React.FC = () => {
         assignments.map(assignment => {
           const submission = submissions.find(s => s.assignmentId === assignment.id);
           const isPastDue = new Date(assignment.dueDate).getTime() < Date.now();
+          const expanded = !!expandedAssignments[assignment.id];
 
           return (
-            <div key={assignment.id} style={{ background: 'white', padding: '24px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
-              <h3 style={{ marginTop: 0 }}>{assignment.title}</h3>
-              <p style={{ color: '#64748b', fontSize: '14px' }}>Môn: {assignment.subjectTitle} | Hạn nộp: {new Date(assignment.dueDate).toLocaleString('vi-VN')} | Điểm tối đa: {assignment.maxScore}</p>
-              <p>{assignment.description}</p>
-              {assignment.rubricCriteria && (
-                <p style={{ fontStyle: 'italic', color: '#475569' }}>Tiêu chí chấm: {assignment.rubricCriteria}</p>
-              )}
-
-              {submission ? (
-                <div style={{ marginTop: '16px', padding: '16px', background: '#f8fafc', borderRadius: '8px' }}>
-                  <p><strong>Trạng thái:</strong> {submission.status}</p>
-                  <p><strong>Tệp đã nộp:</strong> <a href={submission.fileUrl} target="_blank" rel="noreferrer">{submission.fileUrl}</a></p>
-                  <p><strong>Nộp lúc:</strong> {new Date(submission.submittedAt).toLocaleString('vi-VN')}</p>
-                  {submission.finalScore != null && <p><strong>Điểm chính thức:</strong> {submission.finalScore}/{assignment.maxScore}</p>}
-                  {submission.aiSuggestedScore != null && <p><strong>Điểm AI gợi ý:</strong> {submission.aiSuggestedScore}/{assignment.maxScore}</p>}
-                  {submission.aiFeedback && <p><strong>Nhận xét AI:</strong> {submission.aiFeedback}</p>}
-                  {submission.teacherFeedback && <p><strong>Nhận xét giảng viên:</strong> {submission.teacherFeedback}</p>}
+            <div key={assignment.id} style={{ background: 'white', padding: '18px 20px', borderRadius: '10px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', cursor: 'pointer' }} onClick={() => setExpandedAssignments(prev => ({ ...prev, [assignment.id]: !expanded }))}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <h3 style={{ margin: 0, fontSize: '18px', lineHeight: 1.3 }}>{assignment.title}</h3>
+                    {submission ? <span style={{ padding: '4px 8px', background: '#dcfce7', color: '#166534', borderRadius: '999px', fontSize: '12px', fontWeight: 700 }}>Đã nộp</span> : <span style={{ padding: '4px 8px', background: '#fef3c7', color: '#92400e', borderRadius: '999px', fontSize: '12px', fontWeight: 700 }}>Chưa nộp</span>}
+                  </div>
+                  <p style={{ margin: '8px 0 0', color: '#64748b', fontSize: '13px' }}>
+                    Môn: {assignment.subjectTitle} | Hạn nộp: {new Date(assignment.dueDate).toLocaleString('vi-VN')} | Điểm tối đa: {assignment.maxScore}
+                  </p>
                 </div>
-              ) : (
-                <div style={{ marginTop: '16px', display: 'flex', gap: '12px' }}>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                      <label style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        <input type="radio" name={`mode-${assignment.id}`} checked={!usePlantuml[assignment.id]} onChange={() => setUsePlantuml(prev => ({ ...prev, [assignment.id]: false }))} />
-                        <span>Upload ảnh/PDF</span>
-                      </label>
-                      <label style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        <input type="radio" name={`mode-${assignment.id}`} checked={!!usePlantuml[assignment.id]} onChange={() => setUsePlantuml(prev => ({ ...prev, [assignment.id]: true }))} />
-                        <span>Dán PlantUML (text)</span>
-                      </label>
-                    </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpandedAssignments(prev => ({ ...prev, [assignment.id]: !expanded }));
+                  }}
+                  style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#0f172a', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  {expanded ? 'Thu gọn' : 'Chi tiết'}
+                </button>
+              </div>
 
-                    {!usePlantuml[assignment.id] ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <input
-                          type="file"
-                          accept="image/*,application/pdf"
-                          disabled={isPastDue}
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (!f) return;
-                            setFileObject(prev => ({ ...prev, [assignment.id]: f }));
-                            showToast('Tệp đã sẵn sàng, nhấn Nộp bài để gửi.');
-                          }}
-                        />
-                        {fileObject[assignment.id] && (
-                          <span style={{ color: '#334155' }}>
-                            {fileObject[assignment.id]!.name}{' '}
-                            <button
-                              type="button"
-                              onClick={() => setFileObject(prev => ({ ...prev, [assignment.id]: null }))}
-                              style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer' }}
-                            >
-                              Xóa
-                            </button>
-                          </span>
-                        )}
+              {expanded && (
+                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+                  <p style={{ whiteSpace: 'pre-wrap', marginTop: 0 }}>{assignment.description}</p>
+                  {assignment.rubricCriteria && <p style={{ fontStyle: 'italic', color: '#475569', fontSize: '13px', marginTop: 8 }}>Tiêu chí chấm: {assignment.rubricCriteria}</p>}
+
+                  {submission ? (
+                    <div style={{ marginTop: '16px', padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                      <p><strong>Trạng thái:</strong> <span style={{ color: '#10b981', fontWeight: 700 }}>Đã nộp bài</span></p>
+                      <p><strong>Đã nộp:</strong> {getSubmissionKindLabel(submission)}</p>
+                      <p><strong>Ngày nộp:</strong> {new Date(submission.submittedAt).toLocaleString('vi-VN')}</p>
+                      {submission.finalScore != null ? (
+                        <p style={{ fontSize: '18px', color: '#10b981' }}><strong>Điểm chính thức: {submission.finalScore}/{assignment.maxScore}</strong></p>
+                      ) : (
+                        <p><strong>Đang chờ chấm điểm.</strong></p>
+                      )}
+                      {submission.teacherFeedback && <div style={{ marginTop: '8px', padding: '10px', background: '#fff', borderRadius: '4px', border: '1px solid #10b981' }}><strong>Giảng viên Nhận xét:</strong> {submission.teacherFeedback}</div>}
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                          <input type="radio" name={`mode-${assignment.id}`} checked={!usePlantuml[assignment.id]} onChange={() => setUsePlantuml(prev => ({ ...prev, [assignment.id]: false }))} />
+                          <span>Upload ảnh/PDF</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                          <input type="radio" name={`mode-${assignment.id}`} checked={!!usePlantuml[assignment.id]} onChange={() => setUsePlantuml(prev => ({ ...prev, [assignment.id]: true }))} />
+                          <span>Dán PlantUML (Text)</span>
+                        </label>
                       </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <textarea
-                          placeholder="Dán PlantUML ở đây (bắt đầu bằng @startuml)..."
-                          rows={6}
-                          value={plantumlText[assignment.id] || ''}
-                          onChange={(e) => setPlantumlText(prev => ({ ...prev, [assignment.id]: e.target.value }))}
-                          style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
-                        />
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const src = plantumlText[assignment.id] || '';
-                              if (!src || !src.toLowerCase().includes('@startuml')) return showToast('Vui lòng nhập PlantUML hợp lệ trước khi xem preview.');
-                              try {
-                                const res = await fetch('https://www.plantuml.com/plantuml/png', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'text/plain' },
-                                  body: src,
-                                });
-                                if (!res.ok) throw new Error('Không thể tạo preview PlantUML');
-                                const blob = await res.blob();
-                                const url = URL.createObjectURL(blob);
-                                setPlantumlPreviewUrl(prev => ({ ...prev, [assignment.id]: url }));
-                              } catch (err: any) {
-                                showToast(err.message || 'Lỗi tạo preview PlantUML');
-                              }
-                            }}
-                            style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: '#3b82f6', color: 'white', cursor: 'pointer' }}
-                          >Xem preview</button>
+
+                      {!usePlantuml[assignment.id] ? (
+                        <div style={{ padding: '16px', border: '2px dashed #e2e8f0', borderRadius: '8px', textAlign: 'center' }}>
+                          <input type="file" accept="image/*,application/pdf" disabled={isPastDue} onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) setFileObject(prev => ({ ...prev, [assignment.id]: f }));
+                          }} />
+                          {fileObject[assignment.id] && <p style={{ marginTop: '8px', color: '#10b981' }}>Đã chọn: {fileObject[assignment.id]!.name}</p>}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <textarea
+                            placeholder="Nhập mã PlantUML tại đây (ví dụ: @startuml ... @enduml)"
+                            rows={8}
+                            value={plantumlText[assignment.id] || ''}
+                            onChange={(e) => setPlantumlText(prev => ({ ...prev, [assignment.id]: e.target.value }))}
+                            style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontFamily: 'monospace' }}
+                          />
+                          <div>
+                            <button type="button" onClick={() => handlePreview(assignment.id)} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #3b82f6', background: 'white', color: '#3b82f6', cursor: 'pointer' }}>
+                              Xem Preview hình vẽ
+                            </button>
+                          </div>
                           {plantumlPreviewUrl[assignment.id] && (
-                            <button type="button" onClick={() => setPlantumlPreviewUrl(prev => ({ ...prev, [assignment.id]: '' }))} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: '#ef4444', color: 'white', cursor: 'pointer' }}>Xóa preview</button>
+                            <div style={{ marginTop: '10px', textAlign: 'center', background: '#f1f5f9', padding: '10px', borderRadius: '6px' }}>
+                              <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '8px' }}>Hình vẽ xem trước:</p>
+                              <img src={plantumlPreviewUrl[assignment.id]} alt="PlantUML Preview" style={{ maxWidth: '100%', border: '1px solid #e2e8f0', borderRadius: '4px' }} onError={() => showToast('Mã PlantUML không hợp lệ hoặc quá dài để xem trước.')} />
+                            </div>
                           )}
                         </div>
-                        <div style={{ color: '#64748b', fontSize: '12px' }}>Bạn có thể dán mã PlantUML; AI sẽ chấm dựa trên source này.</div>
-                        {plantumlPreviewUrl[assignment.id] && (
-                          <div style={{ marginTop: '8px' }}>
-                            <img src={plantumlPreviewUrl[assignment.id]} alt="PlantUML preview" style={{ maxWidth: '100%', border: '1px solid #e2e8f0', borderRadius: '6px' }} />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => handleSubmit(assignment.id)}
-                    disabled={submittingId === assignment.id || isPastDue}
-                    style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: isPastDue ? '#94a3b8' : '#10b981', color: 'white', cursor: isPastDue ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
-                  >
-                    {isPastDue ? 'Đã quá hạn' : submittingId === assignment.id ? 'Đang nộp...' : 'Nộp bài'}
-                  </button>
+                      )}
+
+                      <button
+                        onClick={() => handleSubmit(assignment.id)}
+                        disabled={submittingId === assignment.id || isPastDue}
+                        style={{
+                          padding: '12px', borderRadius: '8px', border: 'none',
+                          background: isPastDue ? '#94a3b8' : '#10b981',
+                          color: 'white', cursor: isPastDue ? 'not-allowed' : 'pointer',
+                          fontWeight: 'bold', fontSize: '16px'
+                        }}
+                      >
+                        {isPastDue ? 'Đã hết hạn nộp' : submittingId === assignment.id ? 'Đang gửi bài...' : 'Nộp bài ngay'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -1,5 +1,20 @@
 package com.lopjv.qlhoctap.controller;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.lopjv.qlhoctap.dto.ExamQuestionForStudentDto;
 import com.lopjv.qlhoctap.dto.ExamResultResponseDto;
 import com.lopjv.qlhoctap.dto.SubmitExamRequestDto;
@@ -13,13 +28,8 @@ import com.lopjv.qlhoctap.repository.UserRepository;
 import com.lopjv.qlhoctap.security.SecurityUtils;
 import com.lopjv.qlhoctap.service.AssessmentService;
 import com.lopjv.qlhoctap.service.QuestionService;
-import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -32,10 +42,10 @@ public class StudentExamController {
     private final ExamQuestionRepository examQuestionRepository;
 
     public StudentExamController(StudentExamRepository studentExamRepository,
-                                 AssessmentService assessmentService,
-                                 UserRepository userRepository,
-                                 QuestionService questionService,
-                                 ExamQuestionRepository examQuestionRepository) {
+            AssessmentService assessmentService,
+            UserRepository userRepository,
+            QuestionService questionService,
+            ExamQuestionRepository examQuestionRepository) {
         this.studentExamRepository = studentExamRepository;
         this.assessmentService = assessmentService;
         this.userRepository = userRepository;
@@ -44,8 +54,8 @@ public class StudentExamController {
     }
 
     /**
-     * Sinh viên vào phòng thi — tạo bản ghi StudentExam.
-     * Kiểm tra đề thi PUBLISHED, trong thời gian, chưa thi.
+     * Sinh viên vào phòng thi — tạo bản ghi StudentExam. Kiểm tra đề thi
+     * PUBLISHED, trong thời gian, chưa thi.
      */
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @PostMapping("/student/exams/{examId}/start")
@@ -55,8 +65,8 @@ public class StudentExamController {
     }
 
     /**
-     * Ghi nhận sự kiện chuyển tab của sinh viên (chống gian lận).
-     * Frontend gọi mỗi khi phát hiện window blur event.
+     * Ghi nhận sự kiện chuyển tab của sinh viên (chống gian lận). Frontend gọi
+     * mỗi khi phát hiện window blur event.
      */
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @PatchMapping("/student/exams/{examId}/tab-switch")
@@ -80,7 +90,9 @@ public class StudentExamController {
         return ResponseEntity.ok(assessmentService.submitAndGradeExam(requestDto));
     }
 
-    /** Sinh viên lấy câu hỏi đề thi (ẩn đáp án isCorrect) */
+    /**
+     * Sinh viên lấy câu hỏi đề thi (ẩn đáp án isCorrect)
+     */
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
     @GetMapping("/student/exams/{examId}/questions")
     public ResponseEntity<List<ExamQuestionForStudentDto>> getExamQuestionsForStudent(@PathVariable Long examId) {
@@ -96,7 +108,26 @@ public class StudentExamController {
         return ResponseEntity.ok(result);
     }
 
-    /** Giáo viên xem câu hỏi đề thi (có đáp án đầy đủ) */
+    /**
+     * Lấy chi tiết đáp án: Câu hỏi + Đáp án đúng + Đáp án sinh viên
+     */
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
+    @GetMapping("/student/exams/{examId}/answer-details")
+    public ResponseEntity<Map<String, Object>> getExamAnswerDetails(@PathVariable Long examId) {
+        User student = SecurityUtils.getCurrentUser(userRepository);
+        StudentExam result = studentExamRepository.findByExamIdAndStudentId(examId, student.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Chưa có kết quả thi cho môn này"));
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("studentExam", result);
+        response.put("questions", questionService.getExamQuestionsForStudent(examId));
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Giáo viên xem câu hỏi đề thi (có đáp án đầy đủ)
+     */
     @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     @GetMapping("/teacher/exams/{examId}/questions")
     public ResponseEntity<List<ExamQuestion>> getExamQuestionsForTeacher(@PathVariable Long examId) {

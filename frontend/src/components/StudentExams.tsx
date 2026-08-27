@@ -17,66 +17,30 @@ const StudentExams: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        try {
-          const examsData = await studentDashboardApiService.getUpcomingExams();
-          const now = Date.now();
-          const upcomingExams: ExamForStudent[] = examsData.map((exam: any) => ({
-            id: exam.examId,
-            title: exam.title,
-            courseCode: exam.subjectCode || 'N/A',
-            courseName: exam.subjectTitle,
-            type: 'Kiểm tra',
-            startTime: exam.startTime,
-            endTime: exam.endTime,
-            duration: exam.durationMinutes,
-            status: new Date(exam.endTime).getTime() < now
-              ? 'Đã kết thúc'
-              : new Date(exam.startTime).getTime() <= now ? 'Đang diễn ra' : 'Sắp tới',
-            questions: exam.questionCount ?? 0
-          }));
-          setExams(upcomingExams);
-        } catch (apiErr) {
-          console.warn('Backend API chưa sẵn sàng, sử dụng dữ liệu bài thi mẫu.');
-          // Dữ liệu mẫu đồng bộ với TeacherInterface và schema.sql
-          setExams([
-            {
-              id: 1,
-              title: 'Kiểm tra Java cơ bản',
-              courseCode: 'JAVA01',
-              courseName: 'Lập trình Java',
-              type: 'Kiểm tra',
-              startTime: new Date().toISOString(), // Đang diễn ra
-              endTime: new Date(Date.now() + 30 * 60000).toISOString(),
-              duration: 30,
-              status: 'Đang diễn ra',
-              questions: 5
-            },
-            {
-              id: 2,
-              title: 'Kiểm tra Cơ sở dữ liệu',
-              courseCode: 'DB01',
-              courseName: 'Cơ sở dữ liệu',
-              type: 'Kiểm tra',
-              startTime: new Date(Date.now() + 86400000).toISOString(),
-              endTime: new Date(Date.now() + 86500000).toISOString(),
-              duration: 30,
-              status: 'Sắp tới',
-              questions: 3
-            },
-            {
-              id: 3,
-              title: 'Kiểm tra Lập trình Web',
-              courseCode: 'WEB01',
-              courseName: 'Lập trình Web',
-              type: 'Thi giữa kỳ',
-              startTime: new Date(Date.now() + 172800000).toISOString(),
-              endTime: new Date(Date.now() + 172900000).toISOString(),
-              duration: 45,
-              status: 'Sắp tới',
-              questions: 10
-            }
-          ]);
-        }
+        const [examsData, studentResults] = await Promise.all([
+          studentDashboardApiService.getUpcomingExams().catch(() => []),
+          studentDashboardApiService.getExamResults().catch(() => [])
+        ]);
+
+        const attemptedExamIds = new Set((studentResults || []).map((result: any) => Number(result.examId)).filter(Boolean));
+        const now = Date.now();
+        const upcomingExams: ExamForStudent[] = (examsData || []).map((exam: any) => ({
+          id: exam.examId,
+          title: exam.title,
+          courseCode: exam.subjectCode || 'N/A',
+          courseName: exam.subjectTitle,
+          type: 'Kiểm tra',
+          startTime: exam.startTime,
+          endTime: exam.endTime,
+          duration: exam.durationMinutes,
+          status: new Date(exam.endTime).getTime() < now
+            ? 'Đã kết thúc'
+            : new Date(exam.startTime).getTime() <= now ? 'Đang diễn ra' : 'Sắp tới',
+          questions: exam.questionCount ?? 0,
+          attempted: attemptedExamIds.has(Number(exam.examId))
+        }));
+
+        setExams(upcomingExams);
       } catch (err: any) {
         setError(err.message || 'Lỗi hệ thống');
       } finally {
@@ -161,7 +125,11 @@ const StudentExams: React.FC = () => {
               </div>
 
               <div className="exam-actions">
-                {exam.status === 'Đang diễn ra' ? (
+                {exam.attempted ? (
+                  <button className="btn-secondary" disabled>
+                    Đã làm bài, không được làm lại
+                  </button>
+                ) : exam.status === 'Đang diễn ra' ? (
                   <button className="btn-primary btn-exam btn-urgent" onClick={() => handleStartExam(exam.id)}>
                     Vào làm bài ngay →
                   </button>

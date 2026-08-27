@@ -52,6 +52,11 @@ public class CourseMaterialController {
         return ResponseEntity.ok(courseMaterialService.getMaterialsByCourseId(courseId));
     }
 
+    @GetMapping("/subjects/{subjectId}/materials")
+    public ResponseEntity<List<CourseMaterialDto>> getMaterialsBySubject(@PathVariable Long subjectId) {
+        return ResponseEntity.ok(courseMaterialService.getMaterialsBySubjectId(subjectId));
+    }
+
     /**
      * Lấy tài liệu theo ID
      */

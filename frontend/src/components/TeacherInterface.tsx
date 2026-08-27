@@ -7,7 +7,7 @@ import './styles/TeacherInterface.css';
 // 1. INTERFACES
 // =============================================================================
 interface Course { id: number; code: string; title: string; description: string; }
-interface Subject { id: number; courseId: number; code: string; title: string; }
+interface Subject { id: number; courseId: number; code: string; title: string; teacherName?: string; description?: string; }
 interface QuestionOption { content: string; isCorrect: boolean; }
 interface Question {
   id: number; subjectId: number; content: string; chapterTopic: string; difficulty: string;
@@ -69,13 +69,47 @@ const fallbackExams: Exam[] = [
 // 2. COMPONENT CON (Phải khai báo trước)
 // =============================================================================
 
-const TeacherOverview: React.FC<{ courses: Course[]; questions: Question[]; exams: Exam[]; }> = ({ courses, questions, exams }) => (
-  <div className="teacher-overview-stats">
-    <div className="teacher-stat-card"><h3>{courses?.length || 0}</h3><p>Khóa học</p></div>
-    <div className="teacher-stat-card"><h3>{questions?.length || 0}</h3><p>Câu hỏi</p></div>
-    <div className="teacher-stat-card"><h3>{exams?.length || 0}</h3><p>Bài thi hiện có</p></div>
+const TeacherOverview: React.FC<{ courses: Course[]; questions: Question[]; exams: Exam[]; onOpenCourse: (courseId: number) => void; }> = ({ courses, questions, exams, onOpenCourse }) => {
+  const avatarText = 'GV';
+
+  return (
+  <div className="teacher-overview">
+    <div className="teacher-overview-greeting">
+      <div className="teacher-greeting-content">
+        <div className="teacher-greeting-avatar">{avatarText}</div>
+        <div>
+          <h2 className="teacher-greeting-title">Xin chào, Giảng viên!</h2>
+          <p className="teacher-greeting-meta">Tổng quan hoạt động dạy học của bạn</p>
+        </div>
+      </div>
+    </div>
+    <div className="teacher-dashboard-stats">
+      <div className="teacher-dashboard-stat-item">
+        <div className="teacher-dashboard-stat-number">{courses?.length || 0}</div>
+        <div className="teacher-dashboard-stat-label">Khóa học</div>
+      </div>
+      <div className="teacher-dashboard-stat-item">
+        <div className="teacher-dashboard-stat-number">{questions?.length || 0}</div>
+        <div className="teacher-dashboard-stat-label">Câu hỏi</div>
+      </div>
+      <div className="teacher-dashboard-stat-item">
+        <div className="teacher-dashboard-stat-number">{exams?.length || 0}</div>
+        <div className="teacher-dashboard-stat-label">Bài thi hiện có</div>
+      </div>
+    </div>
+    <section className="teacher-overview-courses">
+      <div className="teacher-section-heading"><h2>Khóa học của bạn</h2><span>{courses.length} khóa học</span></div>
+      <div className="teacher-course-cards">
+        {courses.length === 0 ? <p className="teacher-simple-table__empty">Chưa có khóa học nào.</p> : courses.map(course => (
+          <button key={course.id} className="teacher-course-card" onClick={() => onOpenCourse(course.id)} type="button">
+            <strong>{course.code}</strong><h3>{course.title}</h3><p>{course.description || 'Chưa có mô tả khóa học.'}</p><span>Xem môn học →</span>
+          </button>
+        ))}
+      </div>
+    </section>
   </div>
-);
+  );
+};
 
 const DIFFICULTY_OPTIONS = [
   { value: 'EASY', label: 'Dễ' },
@@ -102,10 +136,28 @@ const emptyNewQuestion = () => ({
   options: emptyOptions(),
 });
 
+const TeacherDashboardStats: React.FC<{ coursesCount: number; questionsCount: number; examsCount: number; }> = ({ coursesCount, questionsCount, examsCount }) => (
+  <div className="teacher-dashboard-stats">
+    <div className="teacher-dashboard-stat-item">
+      <div className="teacher-dashboard-stat-number">{coursesCount}</div>
+      <div className="teacher-dashboard-stat-label">Khóa học</div>
+    </div>
+    <div className="teacher-dashboard-stat-item">
+      <div className="teacher-dashboard-stat-number">{questionsCount}</div>
+      <div className="teacher-dashboard-stat-label">Câu hỏi</div>
+    </div>
+    <div className="teacher-dashboard-stat-item">
+      <div className="teacher-dashboard-stat-number">{examsCount}</div>
+      <div className="teacher-dashboard-stat-label">Bài thi</div>
+    </div>
+  </div>
+);
+
 const TeacherQuestionBank: React.FC<{ questions: Question[]; setQuestions: (qs: Question[]) => void; subjects: Subject[]; showToast: (m: string) => void }> = ({ questions, setQuestions, subjects, showToast }) => {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [newQ, setNewQ] = useState(emptyNewQuestion());
+  const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
 
   useEffect(() => {
     if (subjects.length > 0 && newQ.subjectId === 0) {
@@ -132,7 +184,32 @@ const TeacherQuestionBank: React.FC<{ questions: Question[]; setQuestions: (qs: 
 
   const resetForm = () => {
     setNewQ(emptyNewQuestion());
+    setEditingQuestionId(null);
     setShowForm(false);
+  };
+
+  const handleEdit = (question: Question) => {
+    setEditingQuestionId(question.id);
+    setNewQ({
+      subjectId: question.subjectId,
+      chapterTopic: question.chapterTopic || '',
+      content: question.content,
+      questionType: question.questionType || 'SINGLE_CHOICE',
+      difficulty: question.difficulty,
+      options: question.options?.map(option => ({ content: option.content, isCorrect: option.isCorrect })) || emptyOptions(),
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (question: Question) => {
+    if (!window.confirm('Xóa câu hỏi này? Hành động này không thể hoàn tác.')) return;
+    try {
+      await questionsApiService.deleteQuestion(question.id);
+      setQuestions(questions.filter(item => item.id !== question.id));
+      showToast('Đã xóa câu hỏi.');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Lỗi khi xóa câu hỏi.');
+    }
   };
 
   const handleSave = async () => {
@@ -149,23 +226,27 @@ const TeacherQuestionBank: React.FC<{ questions: Question[]; setQuestions: (qs: 
     setLoading(true);
     try {
       const payload = { ...newQ, options: filledOptions };
-      const saved = await questionsApiService.createQuestion(payload);
-      setQuestions([saved, ...questions]);
+      const saved = editingQuestionId
+        ? await questionsApiService.updateQuestion(editingQuestionId, payload)
+        : await questionsApiService.createQuestion(payload);
+      setQuestions(editingQuestionId
+        ? questions.map(question => question.id === editingQuestionId ? saved : question)
+        : [saved, ...questions]);
       resetForm();
-      showToast('Đã lưu câu hỏi thành công!');
-    } catch (e) { showToast('Lỗi khi lưu câu hỏi.'); } finally { setLoading(false); }
+      showToast(editingQuestionId ? 'Đã cập nhật câu hỏi!' : 'Đã lưu câu hỏi thành công!');
+    } catch (e) { showToast(e instanceof Error ? e.message : 'Lỗi khi lưu câu hỏi.'); } finally { setLoading(false); }
   };
 
   return (
     <div className="teacher-section">
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
         <h2>Ngân hàng câu hỏi</h2>
-        <button className="teacher-button teacher-button--primary" onClick={() => setShowForm(true)}>+ Thêm câu hỏi</button>
+        <button className="teacher-button teacher-button--primary" onClick={() => { resetForm(); setShowForm(true); }}>+ Thêm câu hỏi</button>
       </div>
       {showForm && (
         <div className="teacher-modal-overlay">
           <div className="teacher-modal">
-            <h3>Tạo câu hỏi mới</h3>
+            <h3>{editingQuestionId ? 'Chỉnh sửa câu hỏi' : 'Tạo câu hỏi mới'}</h3>
 
             <div className="teacher-question-form-table">
               <div className="teacher-question-form-row">
@@ -262,7 +343,7 @@ const TeacherQuestionBank: React.FC<{ questions: Question[]; setQuestions: (qs: 
             </div>
 
             <div className="modal-actions" style={{ marginTop: '10px' }}>
-              <button className="teacher-button teacher-button--primary" onClick={handleSave} disabled={loading}>{loading ? 'Đang lưu...' : 'Lưu vào Database'}</button>
+              <button className="teacher-button teacher-button--primary" onClick={handleSave} disabled={loading}>{loading ? 'Đang lưu...' : (editingQuestionId ? 'Lưu thay đổi' : 'Lưu vào Database')}</button>
               <button className="teacher-button" onClick={resetForm}>Hủy</button>
             </div>
           </div>
@@ -283,6 +364,10 @@ const TeacherQuestionBank: React.FC<{ questions: Question[]; setQuestions: (qs: 
                 ))}
               </ul>
             )}
+            <div className="teacher-row-actions" style={{ marginTop: '10px' }}>
+              <button className="teacher-button" onClick={() => handleEdit(q)}>Sửa</button>
+              <button className="teacher-button teacher-button--danger" onClick={() => handleDelete(q)}>Xóa</button>
+            </div>
           </div>
         ))}
       </div>
@@ -305,6 +390,42 @@ const TeacherExamsPanel: React.FC<{ exams: Exam[]; questions: Question[]; setExa
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [newExam, setNewExam] = useState(emptyNewExam());
   const [editingExamId, setEditingExamId] = useState<number | null>(null);
+  const [submissionSummary, setSubmissionSummary] = useState<Record<number, { count: number; names: string[]; scores: Array<{ name: string; score: number | null }> }>>({});
+
+  useEffect(() => {
+    const loadSummaries = async () => {
+      const summaries: Record<number, { count: number; names: string[]; scores: Array<{ name: string; score: number | null }> }> = {};
+      for (const exam of exams) {
+        try {
+          const submissions = await examApiService.getExamResults(exam.id);
+          const scoreEntries = Array.isArray(submissions)
+            ? submissions.map((item: any) => {
+                const name = item.student?.fullName || item.student?.username || item.studentName || 'Sinh viên';
+                const rawScore = item.score ?? item.finalScore ?? item.totalScore ?? null;
+                const numericScore = rawScore === null || rawScore === undefined || rawScore === '' ? null : Number(rawScore);
+                return {
+                  name,
+                  score: Number.isFinite(numericScore) ? numericScore : null,
+                };
+              })
+            : [];
+
+          summaries[exam.id] = {
+            count: scoreEntries.length,
+            names: scoreEntries.map(entry => entry.name),
+            scores: scoreEntries,
+          };
+        } catch {
+          summaries[exam.id] = { count: 0, names: [], scores: [] };
+        }
+      }
+      setSubmissionSummary(summaries);
+    };
+
+    if (exams.length > 0) {
+      void loadSummaries();
+    }
+  }, [exams]);
 
   useEffect(() => {
     if (subjects.length > 0 && newExam.subjectId === 0) {
@@ -411,6 +532,7 @@ const TeacherExamsPanel: React.FC<{ exams: Exam[]; questions: Question[]; setExa
               <th>Bắt đầu</th>
               <th>Kết thúc</th>
               <th>Số câu hỏi</th>
+              <th>Sinh viên làm</th>
               <th>Trạng thái</th>
               <th>Thao tác</th>
             </tr>
@@ -426,6 +548,23 @@ const TeacherExamsPanel: React.FC<{ exams: Exam[]; questions: Question[]; setExa
                 <td>{new Date(exam.startTime).toLocaleString('vi-VN')}</td>
                 <td>{new Date(exam.endTime).toLocaleString('vi-VN')}</td>
                 <td>{exam.questions ?? '-'}</td>
+                <td>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '220px' }}>
+                    <strong>{submissionSummary[exam.id]?.count ?? 0} sinh viên</strong>
+                    {submissionSummary[exam.id]?.scores?.length ? (
+                      <div style={{ fontSize: '12px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        {submissionSummary[exam.id].scores.slice(0, 3).map((item, idx) => (
+                          <span key={`${exam.id}-${item.name}-${idx}`}>
+                            {item.name}: <strong>{item.score !== null ? `${item.score}/10` : 'Chưa chấm'}</strong>
+                          </span>
+                        ))}
+                        {(submissionSummary[exam.id].scores.length > 3) && <span>...</span>}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>Chưa có sinh viên nào</span>
+                    )}
+                  </div>
+                </td>
                 <td><span className="teacher-status-badge">{exam.status}</span></td>
                 <td>
                   <div className="teacher-row-actions">
@@ -590,49 +729,162 @@ const TeacherUmlPanel: React.FC<{ assignments: UmlAssignment[]; setAssignments: 
   );
 };
 
-// Renders PlantUML source as an image by requesting the public PlantUML render server
+// Renders PlantUML source as an image via the public PlantUML server.
+// Using a direct image URL avoids browser fetch/CORS issues that caused 'Failed to fetch'.
 const PlantUmlImage: React.FC<{ source: string }> = ({ source }) => {
-  const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let objectUrl: string | null = null;
-    let cancelled = false;
-
-    const render = async () => {
-      if (!source) return;
-      try {
-        const res = await fetch('https://www.plantuml.com/plantuml/png', {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: source,
-        });
-        if (!res.ok) throw new Error('Không thể dựng hình từ PlantUML');
-        const blob = await res.blob();
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setImgUrl(objectUrl);
-      } catch (e: any) {
-        if (!cancelled) setError(e.message || 'Lỗi dựng hình PlantUML');
-      }
-    };
-    void render();
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
+    setError(null);
   }, [source]);
 
-  if (error) return <div style={{ color: '#ef4444', marginTop: 8 }}>{error}</div>;
-  if (!imgUrl) return <div style={{ color: '#64748b', marginTop: 8 }}>Đang dựng hình...</div>;
-  return <img src={imgUrl} alt="PlantUML render" style={{ maxWidth: '100%', border: '1px solid #e2e8f0', borderRadius: 6, marginTop: 8 }} />;
+  if (!source || !source.trim()) {
+    return <div style={{ color: '#64748b', marginTop: 8 }}>Không có mã PlantUML để hiển thị.</div>;
+  }
+
+  try {
+    const hex = Array.from(new TextEncoder().encode(source))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+    const imgUrl = `https://www.plantuml.com/plantuml/png/~h${hex}`;
+
+    return (
+      <img
+        src={imgUrl}
+        alt="PlantUML render"
+        style={{ maxWidth: '100%', border: '1px solid #e2e8f0', borderRadius: 6, marginTop: 8 }}
+        onError={() => setError('Không thể dựng hình PlantUML từ mã nguồn. Vui lòng kiểm tra mã UML.')}
+      />
+    );
+  } catch {
+    return <div style={{ color: '#ef4444', marginTop: 8 }}>Lỗi dựng hình PlantUML.</div>;
+  }
 };
 
 // Small sub-component for teacher to view submissions and grade
+const TeacherResultsPanel: React.FC<{ courses: Course[]; subjects: Subject[]; exams: Exam[]; showToast: (m: string) => void }> = ({ courses, subjects, exams, showToast }) => {
+  const [rows, setRows] = useState<Array<{ studentName: string; courseTitle: string; examsCompleted: number; averageScore: number; studentId: number }>>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const loadResults = async () => {
+      if (exams.length === 0) {
+        setRows([]);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        // Map to store student results by studentId + courseId
+        const studentResultsMap = new Map<string, { studentName: string; courseTitle: string; scores: number[]; studentId: number; courseId: number }>();
+
+        for (const exam of exams) {
+          const subject = subjects.find(s => s.id === exam.subjectId);
+          const course = subject ? courses.find(c => c.id === subject.courseId) : undefined;
+          const courseId = course?.id || 0;
+
+          const results = await examApiService.getExamResults(exam.id).catch(() => []);
+          for (const result of results) {
+            const studentName = result.student?.fullName || result.student?.username || 'Sinh viên';
+            const studentId = result.student?.id || 0;
+            const scoreValue = result.score !== null && result.score !== undefined ? Number(result.score) : null;
+            
+            // Only include if score is not null
+            if (scoreValue !== null && Number.isFinite(scoreValue)) {
+              const key = `${studentId}-${courseId}`;
+              if (!studentResultsMap.has(key)) {
+                studentResultsMap.set(key, {
+                  studentName,
+                  courseTitle: course?.title || 'Không xác định',
+                  scores: [],
+                  studentId,
+                  courseId,
+                });
+              }
+              const entry = studentResultsMap.get(key);
+              if (entry) entry.scores.push(scoreValue);
+            }
+          }
+        }
+
+        // Convert map to rows
+        const aggregated = Array.from(studentResultsMap.values()).map(entry => ({
+          studentName: entry.studentName,
+          courseTitle: entry.courseTitle,
+          examsCompleted: entry.scores.length,
+          averageScore: entry.scores.length > 0 ? Number((entry.scores.reduce((a, b) => a + b, 0) / entry.scores.length).toFixed(2)) : 0,
+          studentId: entry.studentId,
+        }));
+
+        setRows(aggregated);
+      } catch (error) {
+        console.error('Lỗi tải bảng kết quả học tập:', error);
+        setRows([]);
+        showToast('Không thể tải dữ liệu kết quả học tập từ database.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void loadResults();
+  }, [courses, subjects, exams, showToast]);
+
+  const totalStudents = rows.length;
+  const totalExams = rows.reduce((sum, row) => sum + row.examsCompleted, 0);
+  const overallAverage = rows.length > 0 ? (rows.reduce((sum, row) => sum + row.averageScore, 0) / rows.length).toFixed(1) : '0.0';
+
+  if (loading) return <div className="teacher-section"><h2>Kết quả học tập</h2><p>Đang tải dữ liệu từ database...</p></div>;
+
+  return (
+    <div className="teacher-section">
+      <h2>Kết quả học tập</h2>
+      <div className="teacher-dashboard-stats" style={{ marginBottom: '16px' }}>
+        <div className="teacher-dashboard-stat-item">
+          <div className="teacher-dashboard-stat-number">{totalStudents}</div>
+          <div className="teacher-dashboard-stat-label">Số sinh viên</div>
+        </div>
+        <div className="teacher-dashboard-stat-item">
+          <div className="teacher-dashboard-stat-number">{totalExams}</div>
+          <div className="teacher-dashboard-stat-label">Bài kiểm tra</div>
+        </div>
+        <div className="teacher-dashboard-stat-item">
+          <div className="teacher-dashboard-stat-number">{overallAverage}</div>
+          <div className="teacher-dashboard-stat-label">Điểm TB chung</div>
+        </div>
+      </div>
+
+      <div className="teacher-simple-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Họ tên</th>
+              <th>Khóa học</th>
+              <th>Số bài kiểm tra</th>
+              <th>Điểm trung bình</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={4} className="teacher-simple-table__empty">Chưa có dữ liệu kết quả học tập từ database.</td></tr>
+            ) : rows.map((row) => (
+              <tr key={`${row.studentId}-${row.courseTitle}`}>
+                <td>{row.studentName}</td>
+                <td>{row.courseTitle}</td>
+                <td>{row.examsCompleted}</td>
+                <td><strong>{row.averageScore}/10</strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 const TeacherUmlSubmissionsView: React.FC<{ assignmentId: number; maxScore?: number }> = ({ assignmentId, maxScore = 10 }) => {
   const [subs, setSubs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<number | null>(null);
   const [editing, setEditing] = useState<Record<number, { finalScore: string; teacherFeedback: string }>>({});
 
   const load = async () => {
@@ -663,33 +915,289 @@ const TeacherUmlSubmissionsView: React.FC<{ assignmentId: number; maxScore?: num
   if (loading) return <div>Đang tải danh sách nộp bài...</div>;
   if (subs.length === 0) return <div>Chưa có sinh viên nộp bài cho bài kiểm tra này.</div>;
 
-  return (
-    <div style={{ marginTop: 16 }}>
-      {subs.map(s => (
-        <div key={s.id} style={{ padding: 12, border: '1px solid #e2e8f0', marginBottom: 12, borderRadius: 6 }}>
-          <div><strong>Sinh viên:</strong> {s.student?.username || s.student?.email || 'ID:' + s.student?.id}</div>
-          <div><strong>Trạng thái:</strong> {s.status}</div>
-          {s.fileType === 'PLANTUML' ? (
-            <div style={{ marginTop: 8 }}>
-              <strong>Sơ đồ UML (dựng từ PlantUML):</strong>
-              <PlantUmlImage source={s.plantumlSource} />
-            </div>
-          ) : (
-            <div style={{ marginTop: 8 }}><a href={s.fileUrl} target="_blank" rel="noreferrer">Xem tệp nộp</a></div>
-          )}
-          <div style={{ marginTop: 8 }}>
-            <label>Điểm chính thức: </label>
-            <input type="number" min="0" max="100" step="0.5" value={editing[s.id]?.finalScore ?? (s.finalScore ?? '')} onChange={e => setEditing(prev => ({ ...prev, [s.id]: { ...(prev[s.id] || { finalScore: String(s.finalScore ?? ''), teacherFeedback: s.teacherFeedback || '' }), finalScore: e.target.value } }))} />
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <label>Nhận xét giảng viên:</label>
-            <textarea value={editing[s.id]?.teacherFeedback ?? (s.teacherFeedback ?? '')} onChange={e => setEditing(prev => ({ ...prev, [s.id]: { ...(prev[s.id] || { finalScore: String(s.finalScore ?? ''), teacherFeedback: s.teacherFeedback || '' }), teacherFeedback: e.target.value } }))} />
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <button onClick={() => handleGrade(s.id)}>Lưu điểm</button>
+  // Danh sách nộp bài
+  if (selectedSubmissionId === null) {
+    const graded = subs.filter(s => s.finalScore !== null && s.finalScore !== undefined).length;
+    return (
+      <div style={{ marginTop: 16 }}>
+        <div style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ flex: 1 }}>
+            <strong>Tổng nộp:</strong> {subs.length} | <strong>Đã chấm:</strong> {graded}
           </div>
         </div>
-      ))}
+        <div className="teacher-simple-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Tên sinh viên</th>
+                <th>Ngày nộp</th>
+                <th>Trạng thái</th>
+                <th>Điểm</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subs.map((s) => (
+                <tr key={s.id}>
+                  <td>{s.student?.fullName || s.student?.username || s.student?.email || 'ID:' + s.student?.id}</td>
+                  <td>{s.submittedAt ? new Date(s.submittedAt).toLocaleString('vi-VN') : 'N/A'}</td>
+                  <td>{s.status || 'SUBMITTED'}</td>
+                  <td>{s.finalScore !== null && s.finalScore !== undefined ? `${s.finalScore}/${maxScore}` : 'Chưa chấm'}</td>
+                  <td>
+                    <button className="teacher-button" onClick={() => setSelectedSubmissionId(s.id)} style={{ padding: '4px 8px', fontSize: '12px' }}>
+                      Xem chi tiết
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  // Chi tiết bài nộp
+  const selectedSub = subs.find(s => s.id === selectedSubmissionId);
+  if (!selectedSub) return <div>Bài nộp không tìm thấy.</div>;
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ marginBottom: 12 }}>
+        <button className="teacher-button" onClick={() => setSelectedSubmissionId(null)} style={{ padding: '6px 12px' }}>
+          ← Quay lại danh sách
+        </button>
+      </div>
+      <div style={{ padding: 12, border: '1px solid #e2e8f0', borderRadius: 6, background: '#f8fafc' }}>
+        <div><strong>Sinh viên:</strong> {selectedSub.student?.fullName || selectedSub.student?.username || selectedSub.student?.email || 'ID:' + selectedSub.student?.id}</div>
+        <div><strong>Ngày nộp:</strong> {selectedSub.submittedAt ? new Date(selectedSub.submittedAt).toLocaleString('vi-VN') : 'N/A'}</div>
+        <div><strong>Trạng thái:</strong> {selectedSub.status || 'SUBMITTED'}</div>
+        {selectedSub.fileType === 'PLANTUML' ? (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ marginBottom: 10, fontWeight: 600 }}>Sơ đồ UML (dựng từ PlantUML):</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>Source code:</div>
+                <pre style={{ whiteSpace: 'pre-wrap', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: 10, margin: 0, maxHeight: 260, overflow: 'auto' }}>
+                  {selectedSub.plantumlSource || 'Không có source code.'}
+                </pre>
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>Hình UML:</div>
+                <PlantUmlImage source={selectedSub.plantumlSource} />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginTop: 8 }}><a href={selectedSub.fileUrl} target="_blank" rel="noreferrer">Xem tệp nộp</a></div>
+        )}
+        <div style={{ marginTop: 12 }}>
+          <label style={{ display: 'block', marginBottom: 4 }}>Điểm chính thức: </label>
+          <input type="number" min="0" max={maxScore} step="0.5" value={editing[selectedSub.id]?.finalScore ?? (selectedSub.finalScore ?? '')} onChange={e => setEditing(prev => ({ ...prev, [selectedSub.id]: { ...(prev[selectedSub.id] || { finalScore: String(selectedSub.finalScore ?? ''), teacherFeedback: selectedSub.teacherFeedback || '' }), finalScore: e.target.value } }))} style={{ width: '100%', padding: '4px', borderRadius: 4, border: '1px solid #cbd5e1' }} />
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <label style={{ display: 'block', marginBottom: 4 }}>Nhận xét giảng viên:</label>
+          <textarea value={editing[selectedSub.id]?.teacherFeedback ?? (selectedSub.teacherFeedback ?? '')} onChange={e => setEditing(prev => ({ ...prev, [selectedSub.id]: { ...(prev[selectedSub.id] || { finalScore: String(selectedSub.finalScore ?? ''), teacherFeedback: selectedSub.teacherFeedback || '' }), teacherFeedback: e.target.value } }))} style={{ width: '100%', minHeight: '100px', padding: '6px', borderRadius: 4, border: '1px solid #cbd5e1', fontFamily: 'monospace' }} />
+        </div>
+        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+          <button className="teacher-button" onClick={() => handleGrade(selectedSub.id)} style={{ padding: '6px 12px' }}>Lưu điểm</button>
+          <button className="teacher-button" onClick={() => setSelectedSubmissionId(null)} style={{ padding: '6px 12px', background: '#64748b' }}>Quay lại</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const emptyNewCourse = () => ({ code: '', title: '', description: '' });
+
+const TeacherCoursesPanel: React.FC<{ courses: Course[]; setCourses: (courses: Course[]) => void; showToast: (message: string) => void; initialCourseId?: number | null; materials?: CourseMaterial[]; setMaterials?: (materials: CourseMaterial[]) => void }> = ({ courses, setCourses, showToast, initialCourseId = null, materials = [], setMaterials }) => {
+  const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [editingCourseId, setEditingCourseId] = useState<number | null>(null);
+  const [courseForm, setCourseForm] = useState(emptyNewCourse());
+  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(initialCourseId);
+  const [courseSubjects, setCourseSubjects] = useState<Subject[]>([]);
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+  const safeMaterials = Array.isArray(materials) ? materials : [];
+  const [courseMaterials, setCourseMaterials] = useState<CourseMaterial[]>(safeMaterials);
+  const [materialForm, setMaterialForm] = useState({ subjectId: 0, fileName: '', fileType: 'PDF', fileSize: 0, filePath: '', description: '' });
+  const [materialLoading, setMaterialLoading] = useState(false);
+
+  useEffect(() => {
+    if (initialCourseId) setSelectedCourseId(initialCourseId);
+  }, [initialCourseId]);
+
+  useEffect(() => {
+    if (!selectedCourseId) {
+      setCourseSubjects([]);
+      setSelectedSubject(null);
+      return;
+    }
+    coursesApiService.getSubjectsByCourseId(selectedCourseId)
+      .then(data => {
+        const list = Array.isArray(data) ? data : [];
+        setCourseSubjects(list);
+        if (list.length > 0 && (!selectedSubject || !list.some(item => item.id === selectedSubject.id))) {
+          setSelectedSubject(list[0]);
+        }
+      })
+      .catch(() => showToast('Không thể tải danh sách môn học.'));
+  }, [selectedCourseId]);
+
+  useEffect(() => {
+    if (!selectedSubject) {
+      setCourseMaterials([]);
+      return;
+    }
+    materialsApiService.getMaterialsBySubject(selectedSubject.id)
+      .then(data => setCourseMaterials(Array.isArray(data) ? data : []))
+      .catch(() => setCourseMaterials([]));
+    setMaterialForm(prev => ({ ...prev, subjectId: selectedSubject.id }));
+  }, [selectedSubject]);
+
+  const resetForm = () => {
+    setCourseForm(emptyNewCourse());
+    setEditingCourseId(null);
+    setShowForm(false);
+  };
+
+  const handleEdit = (course: Course) => {
+    setEditingCourseId(course.id);
+    setCourseForm({ code: course.code, title: course.title, description: course.description || '' });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (course: Course) => {
+    if (!window.confirm(`Xóa khóa học "${course.title}"? Hành động này không thể hoàn tác.`)) return;
+    try {
+      await coursesApiService.deleteCourse(course.id);
+      setCourses(courses.filter(item => item.id !== course.id));
+      showToast('Đã xóa khóa học.');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Lỗi khi xóa khóa học.');
+    }
+  };
+
+  const handleSave = async () => {
+    if (!courseForm.code.trim() || !courseForm.title.trim()) {
+      showToast('Vui lòng nhập mã và tên khóa học.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const saved = editingCourseId
+        ? await coursesApiService.updateCourse(editingCourseId, courseForm)
+        : await coursesApiService.createCourse(courseForm);
+      setCourses(editingCourseId
+        ? courses.map(course => course.id === editingCourseId ? saved : course)
+        : [saved, ...courses]);
+      resetForm();
+      showToast(editingCourseId ? 'Đã cập nhật khóa học!' : 'Đã tạo khóa học!');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Lỗi khi lưu khóa học.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateMaterial = async () => {
+    if (!selectedCourseId || !selectedSubject || !materialForm.fileName.trim() || !materialForm.filePath.trim()) {
+      showToast('Vui lòng chọn môn học, nhập tên và đường dẫn/link tài liệu.');
+      return;
+    }
+    setMaterialLoading(true);
+    try {
+      const payload = {
+        courseId: selectedCourseId,
+        subjectId: selectedSubject.id,
+        fileName: materialForm.fileName,
+        fileType: materialForm.fileType,
+        fileSize: materialForm.fileSize || 0,
+        filePath: materialForm.filePath,
+        description: materialForm.description,
+      };
+      const saved = await materialsApiService.createMaterial(payload);
+      setCourseMaterials(previous => [saved, ...previous]);
+      const nextMaterials = Array.isArray(materials) ? [saved, ...materials] : [saved];
+      setMaterials?.(nextMaterials);
+      setMaterialForm({ subjectId: selectedSubject.id, fileName: '', fileType: 'PDF', fileSize: 0, filePath: '', description: '' });
+      showToast('Đã đăng tài liệu cho môn học này.');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Lỗi khi đăng tài liệu.');
+    } finally {
+      setMaterialLoading(false);
+    }
+  };
+
+  return (
+    <div className="teacher-section">
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <div><h2>Khóa học</h2><p>Quản lý khóa học trong hệ thống.</p></div>
+        <button className="teacher-button teacher-button--primary" onClick={() => { resetForm(); setShowForm(true); }}>+ Thêm khóa học</button>
+      </div>
+      {showForm && (
+        <div className="teacher-modal-overlay">
+          <div className="teacher-modal" style={{ maxWidth: '620px' }}>
+            <h3>{editingCourseId ? 'Chỉnh sửa khóa học' : 'Tạo khóa học mới'}</h3>
+            <label className="teacher-form-label">Mã khóa học</label>
+            <input value={courseForm.code} onChange={e => setCourseForm({ ...courseForm, code: e.target.value })} placeholder="Ví dụ: CNTT2026" />
+            <label className="teacher-form-label">Tên khóa học</label>
+            <input value={courseForm.title} onChange={e => setCourseForm({ ...courseForm, title: e.target.value })} placeholder="Nhập tên khóa học" />
+            <label className="teacher-form-label">Mô tả</label>
+            <textarea value={courseForm.description} onChange={e => setCourseForm({ ...courseForm, description: e.target.value })} placeholder="Mô tả khóa học" />
+            <div className="modal-actions" style={{ marginTop: '16px' }}>
+              <button className="teacher-button teacher-button--primary" onClick={handleSave} disabled={loading}>{loading ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
+              <button className="teacher-button" onClick={resetForm}>Hủy</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="teacher-simple-table">
+        <table>
+          <thead><tr><th>Mã khóa học</th><th>Tên khóa học</th><th>Mô tả</th><th>Thao tác</th></tr></thead>
+          <tbody>
+            {courses.length === 0 ? <tr><td colSpan={4} className="teacher-simple-table__empty">Chưa có khóa học nào.</td></tr> : courses.map(course => (
+              <tr key={course.id}>
+                <td>{course.code}</td><td><button className="teacher-link-button" onClick={() => setSelectedCourseId(course.id)}>{course.title}</button></td><td>{course.description || '-'}</td>
+                <td><div className="teacher-row-actions"><button className="teacher-button" onClick={() => handleEdit(course)}>Sửa</button><button className="teacher-button teacher-button--danger" onClick={() => handleDelete(course)}>Xóa</button></div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {selectedCourseId && (
+        <section className="teacher-course-workspace">
+          <div className="teacher-section-heading">
+            <div><h2>{courses.find(course => course.id === selectedCourseId)?.title || 'Chi tiết khóa học'}</h2><span>Danh sách môn học</span></div>
+            <button className="teacher-button" onClick={() => setSelectedCourseId(null)}>Đóng</button>
+          </div>
+          <div className="teacher-subject-grid">
+            {courseSubjects.length === 0 ? <p className="teacher-simple-table__empty">Khóa học chưa có môn học.</p> : courseSubjects.map(subject => (
+              <button key={subject.id} className={`teacher-subject-card ${selectedSubject?.id === subject.id ? 'teacher-subject-card--active' : ''}`} onClick={() => setSelectedSubject(subject)} type="button">
+                <strong>{subject.code}</strong><span>{subject.title}</span><small>Giảng viên: {subject.teacherName || 'Chưa cập nhật'}</small>
+              </button>
+            ))}
+          </div>
+          {selectedSubject && (
+            <div className="teacher-subject-detail">
+              <h3>{selectedSubject.code} - {selectedSubject.title}</h3>
+              <div className="teacher-subject-meta"><span><strong>Giảng viên:</strong> {selectedSubject.teacherName || 'Chưa cập nhật'}</span><span><strong>Thời gian học:</strong> Chưa cập nhật</span></div>
+              <p>{selectedSubject.description || 'Môn học chưa có mô tả.'}</p>
+              <div className="teacher-material-manager">
+                <h3>Tài liệu khóa học</h3>
+                <div className="teacher-material-form">
+                  <input placeholder="Tên tài liệu" value={materialForm.fileName} onChange={e => setMaterialForm({ ...materialForm, fileName: e.target.value })} />
+                  <select value={materialForm.fileType} onChange={e => setMaterialForm({ ...materialForm, fileType: e.target.value })}><option>PDF</option><option>DOCX</option><option>VIDEO</option><option>LINK</option></select>
+                  <input type="url" placeholder="Đường dẫn tải lên hoặc link tài liệu" value={materialForm.filePath} onChange={e => setMaterialForm({ ...materialForm, filePath: e.target.value })} />
+                  <input placeholder="Mô tả ngắn" value={materialForm.description} onChange={e => setMaterialForm({ ...materialForm, description: e.target.value })} />
+                  <button className="teacher-button teacher-button--primary" onClick={handleCreateMaterial} disabled={materialLoading}>{materialLoading ? 'Đang đăng...' : 'Đăng tài liệu'}</button>
+                </div>
+                {courseMaterials.length === 0 ? <p className="teacher-simple-table__empty">Chưa có tài liệu cho môn này.</p> : <ul className="teacher-material-list">{courseMaterials.map(material => <li key={material.id}><a href={material.filePath} target="_blank" rel="noreferrer">{material.fileName}</a><span>{material.fileType}</span></li>)}</ul>}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 };
@@ -706,6 +1214,7 @@ const TeacherInterface: React.FC<TeacherInterfaceProps> = ({
   const [questions, setQuestions] = useState<Question[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [umlAssignments, setUmlAssignments] = useState<UmlAssignment[]>([]);
+  const [selectedCourseFromOverview, setSelectedCourseFromOverview] = useState<number | null>(null);
   const [toast, setToast] = useState('');
 
   const showToast = (message: string) => {
@@ -762,6 +1271,11 @@ const TeacherInterface: React.FC<TeacherInterfaceProps> = ({
     void loadData();
   }, []);
 
+  const handleOpenCourse = (courseId: number) => {
+    setSelectedCourseFromOverview(courseId);
+    setActiveView('courses');
+  };
+
   const pageTitle = useMemo(() => navItems.find(item => item.key === activeView)?.label || 'Tổng quan', [activeView]);
 
   return (
@@ -782,8 +1296,8 @@ const TeacherInterface: React.FC<TeacherInterfaceProps> = ({
           <div className="teacher-account"><span>Chào, <strong>{userName}</strong></span><button className="teacher-button teacher-button--logout" onClick={onLogout}>Đăng xuất</button></div>
         </header>
         <div className="teacher-content">
-          {activeView === 'overview' && <TeacherOverview courses={courses} questions={questions} exams={exams} />}
-          {activeView === 'courses' && <div className="teacher-section"><h2>Khóa học</h2><p>Quản lý khóa học trong hệ thống.</p></div>}
+          {activeView === 'overview' && <TeacherOverview courses={courses} questions={questions} exams={exams} onOpenCourse={handleOpenCourse} />}
+          {activeView === 'courses' && <TeacherCoursesPanel courses={courses} setCourses={setCourses} showToast={showToast} initialCourseId={selectedCourseFromOverview} materials={materials} setMaterials={setMaterials} />}
           {activeView === 'questions' && <TeacherQuestionBank questions={questions} setQuestions={setQuestions} subjects={subjects} showToast={showToast} />}
           {activeView === 'exams' && (
             <>
@@ -791,7 +1305,7 @@ const TeacherInterface: React.FC<TeacherInterfaceProps> = ({
               <TeacherUmlPanel assignments={umlAssignments} setAssignments={setUmlAssignments} subjects={subjects} showToast={showToast} />
             </>
           )}
-          {activeView === 'results' && <div className="teacher-section"><h2>Kết quả học tập</h2><p>Dữ liệu đang được đồng bộ...</p></div>}
+          {activeView === 'results' && <TeacherResultsPanel courses={courses} subjects={subjects} exams={exams} showToast={showToast} />}
           {activeView === 'reports' && <div className="teacher-section"><h2>Báo cáo hệ thống</h2></div>}
         </div>
         {toast && <div className="teacher-toast">{toast}</div>}

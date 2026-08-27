@@ -48,6 +48,7 @@ export interface ExamResult {
   maxScore: number;
   percentage: number;
   submittedAt: string;
+  submitTime?: string | number; // raw timestamp for formatting
   status: 'Đã chấm' | 'Chờ chấm' | 'Vắng';
   teacherComment?: string;
   wrongQuestions?: number[];

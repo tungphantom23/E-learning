@@ -10,10 +10,12 @@ import com.lopjv.qlhoctap.dto.CourseMaterialDto;
 import com.lopjv.qlhoctap.dto.CreateCourseMaterialRequest;
 import com.lopjv.qlhoctap.entity.Course;
 import com.lopjv.qlhoctap.entity.CourseMaterial;
+import com.lopjv.qlhoctap.entity.Subject;
 import com.lopjv.qlhoctap.entity.User;
 import com.lopjv.qlhoctap.exception.ResourceNotFoundException;
 import com.lopjv.qlhoctap.repository.CourseMaterialRepository;
 import com.lopjv.qlhoctap.repository.CourseRepository;
+import com.lopjv.qlhoctap.repository.SubjectRepository;
 import com.lopjv.qlhoctap.repository.UserRepository;
 
 @Service
@@ -21,13 +23,16 @@ public class CourseMaterialService {
 
     private final CourseMaterialRepository courseMaterialRepository;
     private final CourseRepository courseRepository;
+    private final SubjectRepository subjectRepository;
     private final UserRepository userRepository;
 
     public CourseMaterialService(CourseMaterialRepository courseMaterialRepository,
             CourseRepository courseRepository,
+            SubjectRepository subjectRepository,
             UserRepository userRepository) {
         this.courseMaterialRepository = courseMaterialRepository;
         this.courseRepository = courseRepository;
+        this.subjectRepository = subjectRepository;
         this.userRepository = userRepository;
     }
 
@@ -48,6 +53,12 @@ public class CourseMaterialService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khóa học với ID: " + courseId));
 
         return courseMaterialRepository.findByCourseIdAndActive(courseId).stream()
+                .map(this::mapToDto)
+                .collect(Collectors.toList());
+    }
+
+    public List<CourseMaterialDto> getMaterialsBySubjectId(Long subjectId) {
+        return courseMaterialRepository.findBySubjectIdAndActive(subjectId).stream()
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
     }
@@ -81,11 +92,15 @@ public class CourseMaterialService {
         Course course = courseRepository.findById(request.getCourseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khóa học với ID: " + request.getCourseId()));
 
+        Subject subject = subjectRepository.findById(request.getSubjectId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy môn học với ID: " + request.getSubjectId()));
+
         User uploadedBy = userRepository.findById(uploadedByUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng với ID: " + uploadedByUserId));
 
         CourseMaterial material = CourseMaterial.builder()
                 .course(course)
+                .subject(subject)
                 .fileName(request.getFileName().trim())
                 .fileType(request.getFileType().trim())
                 .fileSize(request.getFileSize())
@@ -109,7 +124,11 @@ public class CourseMaterialService {
         Course course = courseRepository.findById(request.getCourseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khóa học với ID: " + request.getCourseId()));
 
+        Subject subject = subjectRepository.findById(request.getSubjectId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy môn học với ID: " + request.getSubjectId()));
+
         material.setCourse(course);
+        material.setSubject(subject);
         material.setFileName(request.getFileName().trim());
         material.setFileType(request.getFileType().trim());
         material.setFileSize(request.getFileSize());
@@ -138,8 +157,11 @@ public class CourseMaterialService {
         return CourseMaterialDto.builder()
                 .id(material.getId())
                 .courseId(material.getCourse().getId())
+                .subjectId(material.getSubject() != null ? material.getSubject().getId() : null)
                 .courseCode(material.getCourse().getCode())
                 .courseName(material.getCourse().getTitle())
+                .subjectCode(material.getSubject() != null ? material.getSubject().getCode() : null)
+                .subjectTitle(material.getSubject() != null ? material.getSubject().getTitle() : null)
                 .fileName(material.getFileName())
                 .fileType(material.getFileType())
                 .fileSize(material.getFileSize())

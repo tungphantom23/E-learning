@@ -32,7 +32,10 @@ const App: React.FC = () => {
   // Fetch materials khi đã auth
   useEffect(() => {
     if (isAuthenticated) {
-      materialsApiService.getMyMaterials()
+      const materialRequest = localStorage.getItem('userRole') === 'ROLE_STUDENT'
+        ? materialsApiService.getAllActiveMaterials()
+        : materialsApiService.getMyMaterials();
+      materialRequest
         .then((data: CourseMaterial[]) => setMaterials(data || []))
         .catch((err: unknown) => {
           console.error('Lỗi lấy tài liệu:', err);

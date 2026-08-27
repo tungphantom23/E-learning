@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import StudentDashboard from './StudentDashboard';
 import StudentCourses from './StudentCourses';
 import StudentExams from './StudentExams';
 import StudentResults from './StudentResults';
 import StudentUmlAssignments from './StudentUmlAssignments';
+import { materialsApiService } from '../services/apiService';
 import type { CourseMaterial } from '../types/shared';
 import './styles/StudentInterface.css';
 
@@ -32,6 +33,28 @@ const StudentInterface: React.FC<StudentInterfaceProps> = ({
   userName = 'Sinh viên'
 }) => {
   const [currentView, setCurrentView] = useState<StudentView>('dashboard');
+  const [studentMaterials, setStudentMaterials] = useState<CourseMaterial[]>(materials);
+
+  useEffect(() => {
+    setStudentMaterials(Array.isArray(materials) ? materials : []);
+  }, [materials]);
+
+  useEffect(() => {
+    if (userRole !== 'student' || currentView !== 'materials') return;
+
+    let ignore = false;
+    materialsApiService.getAllActiveMaterials()
+      .then((data) => {
+        if (!ignore) setStudentMaterials(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!ignore) setStudentMaterials([]);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [userRole, currentView]);
 
   const handleViewChange = (view: StudentView) => {
     setCurrentView(view);
@@ -51,7 +74,7 @@ const StudentInterface: React.FC<StudentInterfaceProps> = ({
       case 'uml':
         return <StudentUmlAssignments />;
       case 'materials':
-        return <StudentMaterials materials={materials} />;
+        return <StudentMaterials materials={studentMaterials} />;
       case 'results':
         return <StudentResults />;
       default:
@@ -200,10 +223,13 @@ const StudentMaterials: React.FC<{ materials: CourseMaterial[] }> = ({ materials
                     📄 {material.fileName}
                   </h3>
                   <p style={{ margin: '0', color: '#64748b', fontSize: '13px' }}>
-                    {material.courseCode} - {material.courseName}
+                    {material.courseCode} - {material.subjectTitle || material.courseName}
                   </p>
                 </div>
-                <button
+                <a
+                  href={material.filePath}
+                  target="_blank"
+                  rel="noreferrer"
                   style={{
                     padding: '8px 12px',
                     background: '#10b981',
@@ -213,10 +239,12 @@ const StudentMaterials: React.FC<{ materials: CourseMaterial[] }> = ({ materials
                     cursor: 'pointer',
                     fontSize: '13px',
                     fontWeight: '600',
+                    textDecoration: 'none',
+                    display: 'inline-block',
                   }}
                 >
-                  📥 Tải xuống
-                </button>
+                  📥 Xem tài liệu
+                </a>
               </div>
 
               {material.description && (
